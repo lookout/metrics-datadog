@@ -1,22 +1,5 @@
 package org.coursera.metrics.datadog;
 
-import com.codahale.metrics.Clock;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.Metered;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.ScheduledReporter;
-import com.codahale.metrics.Snapshot;
-import com.codahale.metrics.Timer;
-import org.coursera.metrics.datadog.model.DatadogCounter;
-import org.coursera.metrics.datadog.model.DatadogGauge;
-import org.coursera.metrics.datadog.transport.Transport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -24,6 +7,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
+
+import org.coursera.metrics.datadog.model.DatadogCounter;
+import org.coursera.metrics.datadog.model.DatadogGauge;
+import org.coursera.metrics.datadog.transport.Transport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.codahale.metrics.Clock;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metered;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.ScheduledReporter;
+import com.codahale.metrics.Snapshot;
+import com.codahale.metrics.Timer;
 
 public class DatadogReporter extends ScheduledReporter {
 
@@ -116,6 +118,7 @@ public class DatadogReporter extends ScheduledReporter {
   private void reportTimer(String name, Timer timer, long timestamp, List<String> tags)
       throws IOException {
     final Snapshot snapshot = timer.getSnapshot();
+    List<String> mergedTags = mergedTags(timer, tags);
 
     double[] values = { snapshot.getMax(), snapshot.getMean(), snapshot.getMin(), snapshot.getStdDev(),
         snapshot.getMedian(), snapshot.get75thPercentile(), snapshot.get95thPercentile(), snapshot.get98thPercentile(),
@@ -128,22 +131,23 @@ public class DatadogReporter extends ScheduledReporter {
             toNumber(convertDuration(values[i])),
             timestamp,
             host,
-            tags));
+            mergedTags));
       }
     }
 
-    reportMetered(name, timer, timestamp, tags);
+    reportMetered(name, timer, timestamp, mergedTags);
   }
 
   private void reportMetered(String name, Metered meter, long timestamp, List<String> tags)
       throws IOException {
+    List<String> mergedTags = mergedTags(meter, tags);
     if (expansions.contains(Expansion.COUNT)) {
       request.addCounter(new DatadogCounter(
           appendExpansionSuffix(name, Expansion.COUNT),
           meter.getCount(),
           timestamp,
           host,
-          tags));
+          mergedTags));
     }
 
     double[] values = { meter.getOneMinuteRate(), meter.getFiveMinuteRate(),
@@ -156,7 +160,7 @@ public class DatadogReporter extends ScheduledReporter {
             toNumber(convertRate(values[i])),
             timestamp,
             host,
-            tags));
+            mergedTags));
       }
     }
   }
@@ -164,6 +168,7 @@ public class DatadogReporter extends ScheduledReporter {
   private void reportHistogram(String name, Histogram histogram, long timestamp, List<String> tags)
       throws IOException {
     final Snapshot snapshot = histogram.getSnapshot();
+    List<String> mergedTags = mergedTags(histogram, tags);
 
     if (expansions.contains(Expansion.COUNT)) {
       request.addCounter(new DatadogCounter(
@@ -171,7 +176,7 @@ public class DatadogReporter extends ScheduledReporter {
           histogram.getCount(),
           timestamp,
           host,
-          tags));
+          mergedTags));
     }
 
     Number[] values = { snapshot.getMax(), snapshot.getMean(), snapshot.getMin(), snapshot.getStdDev(),
@@ -185,22 +190,29 @@ public class DatadogReporter extends ScheduledReporter {
             toNumber(values[i]),
             timestamp,
             host,
-            tags));
+            mergedTags));
       }
     }
   }
 
   private void reportCounter(String name, Counter counter, long timestamp, List<String> tags)
       throws IOException {
-    request.addCounter(new DatadogCounter(name, counter.getCount(), timestamp, host, tags));
+    request.addCounter(new DatadogCounter(name, counter.getCount(), timestamp, host, mergedTags(counter, tags)));
   }
 
   private void reportGauge(String name, Gauge gauge, long timestamp, List<String> tags)
       throws IOException {
     final Number value = toNumber(gauge.getValue());
     if (value != null) {
-      request.addGauge(new DatadogGauge(name, value, timestamp, host, tags));
+      request.addGauge(new DatadogGauge(name, value, timestamp, host, mergedTags(gauge, tags)));
     }
+  }
+
+  private List<String> mergedTags(Metric metric, List<String> tags) {
+    if (metric instanceof Tagged) {
+      return TagsMerger.mergeTags(tags, ((Tagged)metric).getTags());
+    }
+    return tags;
   }
 
   private Number toNumber(Object o) {

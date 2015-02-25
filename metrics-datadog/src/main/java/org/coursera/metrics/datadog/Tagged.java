@@ -1,16 +1,16 @@
 package org.coursera.metrics.datadog;
 
-import java.util.AbstractList;
+import java.util.List;
 
 /**
- * An interface to be implemented by Gauges which wish to expose additional
+ * An interface to be implemented by Gauges, Counter, etc which wish to expose additional
  * tags to datadog
  */
-public interface TaggedGauge {
+public interface Tagged {
 
     /**
      * Return a List of Strings to values for Datadog reporter to send along to datadog
      * with the metrics
      */
-    public AbstractList getTags();
+    public List<String> getTags();
 }

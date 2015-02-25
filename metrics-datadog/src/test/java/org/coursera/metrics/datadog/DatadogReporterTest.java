@@ -8,8 +8,10 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Reservoir;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
+
 import org.coursera.metrics.datadog.DatadogReporter.Expansion;
 import org.coursera.metrics.datadog.model.DatadogCounter;
 import org.coursera.metrics.datadog.model.DatadogGauge;
@@ -30,6 +32,16 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 public class DatadogReporterTest {
+  static interface TaggedGauge extends Gauge, Tagged {}
+  static abstract class TaggedCounter extends Counter implements Tagged {}
+  static abstract class TaggedMeter extends Meter implements Tagged {}
+  static abstract class TaggedTimer extends Timer implements Tagged {}
+  static abstract class TaggedHistogram extends Histogram implements Tagged {
+    public TaggedHistogram(Reservoir reservoir) {
+        super(reservoir);
+    }
+  }
+
   private static final String HOST = "hostname";
   private static final String PREFIX = "testprefix";
   private final long timestamp = 1000198;
@@ -43,6 +55,7 @@ public class DatadogReporterTest {
   private DatadogReporter reporterWithPrefix;
   private DatadogReporter reporterWithCallback;
   private List<String> tags;
+  private List<String> mergedTags;
 
   @Before
   public void setUp() throws IOException {
@@ -52,6 +65,9 @@ public class DatadogReporterTest {
     tags = new ArrayList<String>();
     tags.add("env:prod");
     tags.add("version:1.0.0");
+    mergedTags = new ArrayList<String>();
+    mergedTags.add("env:prod");
+    mergedTags.add("version:1.2.3");
     reporter = DatadogReporter
         .forRegistry(metricsRegistry)
         .withHost(HOST)
@@ -99,6 +115,19 @@ public class DatadogReporterTest {
   }
 
   @Test
+  public void reportsByteGaugeValuesAndTags() throws Exception {
+    Gauge gauge = gauge((byte) 1, "version:1.2.3");
+
+    reporter.report(map("gauge", gauge),
+            this.<Counter>map(),
+            this.<Histogram>map(),
+            this.<Meter>map(),
+            this.<Timer>map());
+
+    gaugeTestHelper("gauge", (byte) 1, timestamp, HOST, mergedTags);
+  }
+
+  @Test
   public void reportsShortGaugeValues() throws Exception {
     reporter.report(map("gauge", gauge((short) 1)),
                     this.<Counter>map(),
@@ -107,6 +136,19 @@ public class DatadogReporterTest {
                     this.<Timer>map());
 
     gaugeTestHelper("gauge", (short) 1, timestamp, HOST, tags);
+  }
+
+  @Test
+  public void reportsShortGaugeValuesAndTags() throws Exception {
+    Gauge gauge = gauge((short) 1, "version:1.2.3");
+
+    reporter.report(map("gauge", gauge),
+            this.<Counter>map(),
+            this.<Histogram>map(),
+            this.<Meter>map(),
+            this.<Timer>map());
+
+    gaugeTestHelper("gauge", (short) 1, timestamp, HOST, mergedTags);
   }
 
   @Test
@@ -155,8 +197,7 @@ public class DatadogReporterTest {
 
   @Test
   public void reportsCounters() throws Exception {
-    final Counter counter = mock(Counter.class);
-    when(counter.getCount()).thenReturn(100L);
+    final Counter counter = setupCounter(Counter.class);
 
     reporter.report(this.<Gauge>map(),
                     this.<Counter>map("counter", counter),
@@ -164,6 +205,24 @@ public class DatadogReporterTest {
                     this.<Meter>map(),
                     this.<Timer>map());
 
+    verifyCounter(this.tags);
+  }
+
+  @Test
+  public void reportsCountersWithTags() throws Exception {
+    final TaggedCounter counter = setupCounter(TaggedCounter.class);
+    when(counter.getTags()).thenReturn(Arrays.asList("version:1.2.3"));
+
+    reporter.report(this.<Gauge>map(),
+                    this.<Counter>map("counter", counter),
+                    this.<Histogram>map(),
+                    this.<Meter>map(),
+                    this.<Timer>map());
+
+    verifyCounter(this.mergedTags);
+  }
+
+  private void verifyCounter(List<String> tags) throws IOException, Exception {
     final InOrder inOrder = inOrder(transport, request);
     inOrder.verify(transport).prepare();
     inOrder.verify(request).addCounter(new DatadogCounter("counter", 100L, timestamp, HOST, tags));
@@ -174,24 +233,15 @@ public class DatadogReporterTest {
     verifyNoMoreInteractions(transport, request);
   }
 
+  private <T extends Counter> T setupCounter(Class<T> clazz) {
+    final T counter = mock(clazz);
+    when(counter.getCount()).thenReturn(100L);
+    return counter;
+  }
+
   @Test
   public void reportsHistograms() throws Exception {
-    final Histogram histogram = mock(Histogram.class);
-    when(histogram.getCount()).thenReturn(1L);
-
-    final Snapshot snapshot = mock(Snapshot.class);
-    when(snapshot.getMax()).thenReturn(2L);
-    when(snapshot.getMean()).thenReturn(3.0);
-    when(snapshot.getMin()).thenReturn(4L);
-    when(snapshot.getStdDev()).thenReturn(5.0);
-    when(snapshot.getMedian()).thenReturn(6.0);
-    when(snapshot.get75thPercentile()).thenReturn(7.0);
-    when(snapshot.get95thPercentile()).thenReturn(8.0);
-    when(snapshot.get98thPercentile()).thenReturn(9.0);
-    when(snapshot.get99thPercentile()).thenReturn(10.0);
-    when(snapshot.get999thPercentile()).thenReturn(11.0);
-
-    when(histogram.getSnapshot()).thenReturn(snapshot);
+    final Histogram histogram = setupHistogram(Histogram.class);
 
     reporter.report(this.<Gauge>map(),
                     this.<Counter>map(),
@@ -199,6 +249,24 @@ public class DatadogReporterTest {
                     this.<Meter>map(),
                     this.<Timer>map());
 
+    verifyHistogram(this.tags);
+  }
+
+  @Test
+  public void reportsHistogramsWithTags() throws Exception {
+    final TaggedHistogram histogram = setupHistogram(TaggedHistogram.class);
+    when(histogram.getTags()).thenReturn(Arrays.asList("version:1.2.3"));
+
+    reporter.report(this.<Gauge>map(),
+                    this.<Counter>map(),
+                    this.<Histogram>map("histogram", histogram),
+                    this.<Meter>map(),
+                    this.<Timer>map());
+
+    verifyHistogram(this.mergedTags);
+  }
+
+  private void verifyHistogram(List<String> tags) throws IOException, Exception {
     final InOrder inOrder = inOrder(transport, request);
     inOrder.verify(transport).prepare();
     inOrder.verify(request).addCounter(new DatadogCounter("histogram.count", 1L, timestamp, HOST, tags));
@@ -219,14 +287,29 @@ public class DatadogReporterTest {
     verifyNoMoreInteractions(transport, request);
   }
 
+  private <T extends Histogram> T setupHistogram(final Class<T> clazz) {
+    T histogram = mock(clazz);
+    when(histogram.getCount()).thenReturn(1L);
+
+    final Snapshot snapshot = mock(Snapshot.class);
+    when(snapshot.getMax()).thenReturn(2L);
+    when(snapshot.getMean()).thenReturn(3.0);
+    when(snapshot.getMin()).thenReturn(4L);
+    when(snapshot.getStdDev()).thenReturn(5.0);
+    when(snapshot.getMedian()).thenReturn(6.0);
+    when(snapshot.get75thPercentile()).thenReturn(7.0);
+    when(snapshot.get95thPercentile()).thenReturn(8.0);
+    when(snapshot.get98thPercentile()).thenReturn(9.0);
+    when(snapshot.get99thPercentile()).thenReturn(10.0);
+    when(snapshot.get999thPercentile()).thenReturn(11.0);
+
+    when(histogram.getSnapshot()).thenReturn(snapshot);
+    return histogram;
+  }
+
   @Test
   public void reportsMeters() throws Exception {
-    final Meter meter = mock(Meter.class);
-    when(meter.getCount()).thenReturn(1L);
-    when(meter.getOneMinuteRate()).thenReturn(2.0);
-    when(meter.getFiveMinuteRate()).thenReturn(3.0);
-    when(meter.getFifteenMinuteRate()).thenReturn(4.0);
-    when(meter.getMeanRate()).thenReturn(5.0);
+    final Meter meter = setupMeter(Meter.class);
 
     reporter.report(this.<Gauge>map(),
                     this.<Counter>map(),
@@ -234,6 +317,24 @@ public class DatadogReporterTest {
                     this.<Meter>map("meter", meter),
                     this.<Timer>map());
 
+    verifyMeter(tags);
+  }
+
+  @Test
+  public void reportsMetersWithTags() throws Exception {
+    final TaggedMeter meter = setupMeter(TaggedMeter.class);
+    when(meter.getTags()).thenReturn(Arrays.asList("version:1.2.3"));
+
+    reporter.report(this.<Gauge>map(),
+                    this.<Counter>map(),
+                    this.<Histogram>map(),
+                    this.<Meter>map("meter", meter),
+                    this.<Timer>map());
+
+    verifyMeter(mergedTags);
+  }
+
+  private void verifyMeter(List<String> tags) throws IOException, Exception {
     final InOrder inOrder = inOrder(transport, request);
     inOrder.verify(transport).prepare();
     inOrder.verify(request).addCounter(new DatadogCounter("meter.count", 1L, timestamp, HOST, tags));
@@ -248,9 +349,71 @@ public class DatadogReporterTest {
     verifyNoMoreInteractions(transport, request);
   }
 
+  private <T extends Meter> T setupMeter(final Class<T> clazz) {
+    final T meter = mock(clazz);
+    when(meter.getCount()).thenReturn(1L);
+    when(meter.getOneMinuteRate()).thenReturn(2.0);
+    when(meter.getFiveMinuteRate()).thenReturn(3.0);
+    when(meter.getFifteenMinuteRate()).thenReturn(4.0);
+    when(meter.getMeanRate()).thenReturn(5.0);
+    return meter;
+  }
+
   @Test
   public void reportsTimers() throws Exception {
-    final Timer timer = mock(Timer.class);
+    final Timer timer = setupTimer(Timer.class);
+
+    reporter.report(this.<Gauge>map(),
+            this.<Counter>map(),
+            this.<Histogram>map(),
+            this.<Meter>map(),
+            map("timer", timer));
+
+    verifyTimer(this.tags);
+  }
+
+
+  @Test
+  public void reportsTimersWithTags() throws Exception {
+    final TaggedTimer timer = setupTimer(TaggedTimer.class);
+    when(timer.getTags()).thenReturn(Arrays.asList("version:1.2.3"));
+
+    reporter.report(this.<Gauge>map(),
+            this.<Counter>map(),
+            this.<Histogram>map(),
+            this.<Meter>map(),
+            map("timer", (Timer) timer));
+
+    verifyTimer(this.mergedTags);
+  }
+
+  private void verifyTimer(List<String> tags) throws IOException, Exception {
+    final InOrder inOrder = inOrder(transport, request);
+    inOrder.verify(transport).prepare();
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.max", 100.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.mean", 200.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.min", 300.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.stddev", 400.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.median", 500.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.p75", 600.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.p95", 700.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.p98", 800.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.p99", 900.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.p999", 1000.0, timestamp, HOST, tags));
+    inOrder.verify(request).addCounter(new DatadogCounter("timer.count", 1L, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.1MinuteRate", 3.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.5MinuteRate", 4.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.15MinuteRate", 5.0, timestamp, HOST, tags));
+    inOrder.verify(request).addGauge(new DatadogGauge("timer.meanRate", 2.0, timestamp, HOST, tags));
+    inOrder.verify(request).send();
+
+    verify(transport).prepare();
+    verify(request).send();
+    verifyNoMoreInteractions(transport, request);
+  }
+
+  private <T extends Timer> T setupTimer(Class<T> clazz) {
+    final T timer = mock(clazz);
     when(timer.getCount()).thenReturn(1L);
     when(timer.getMeanRate()).thenReturn(2.0);
     when(timer.getOneMinuteRate()).thenReturn(3.0);
@@ -279,35 +442,7 @@ public class DatadogReporterTest {
         .thenReturn((double) TimeUnit.MILLISECONDS.toNanos(1000));
 
     when(timer.getSnapshot()).thenReturn(snapshot);
-
-    reporter.report(this.<Gauge>map(),
-            this.<Counter>map(),
-            this.<Histogram>map(),
-            this.<Meter>map(),
-            map("timer", timer));
-
-    final InOrder inOrder = inOrder(transport, request);
-    inOrder.verify(transport).prepare();
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.max", 100.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.mean", 200.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.min", 300.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.stddev", 400.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.median", 500.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.p75", 600.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.p95", 700.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.p98", 800.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.p99", 900.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.p999", 1000.0, timestamp, HOST, tags));
-    inOrder.verify(request).addCounter(new DatadogCounter("timer.count", 1L, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.1MinuteRate", 3.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.5MinuteRate", 4.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.15MinuteRate", 5.0, timestamp, HOST, tags));
-    inOrder.verify(request).addGauge(new DatadogGauge("timer.meanRate", 2.0, timestamp, HOST, tags));
-    inOrder.verify(request).send();
-
-    verify(transport).prepare();
-    verify(request).send();
-    verifyNoMoreInteractions(transport, request);
+    return timer;
   }
 
   @Test
@@ -499,6 +634,13 @@ public class DatadogReporterTest {
     final TreeMap<String, T> map = new TreeMap<String, T>();
     map.put(name, metric);
     return map;
+  }
+
+  private <T> Gauge gauge(T value, String... tags) {
+    final TaggedGauge gauge = mock(TaggedGauge.class);
+    when(gauge.getValue()).thenReturn(value);
+    when(gauge.getTags()).thenReturn(Arrays.asList(tags));
+    return gauge;
   }
 
   private <T> Gauge gauge(T value) {
