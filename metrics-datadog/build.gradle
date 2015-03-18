@@ -1,11 +1,3 @@
-plugins {
-    id 'java'
-}
-
-repositories {
-    jcenter()
-}
-
 dependencies {
     compile "io.dropwizard.metrics:metrics-core:${metricsVersion}"
     compile 'org.apache.httpcomponents:fluent-hc:4.4+'
@@ -14,14 +6,4 @@ dependencies {
 
     testCompile "junit:junit:${junitVersion}"
     testCompile 'org.mockito:mockito-all:1.9.5+'
-}
-
-test {
-    testLogging {
-        /* we want more test failure information, see:
-         *  <http://mrhaki.blogspot.com/2013/05/gradle-goodness-show-more-information.html>
-         */
-        exceptionFormat = 'full'
-        events "passed", "skipped", "failed", "standardOut", "standardError"
-    }
 }
