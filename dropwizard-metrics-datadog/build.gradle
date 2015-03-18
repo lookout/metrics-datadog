@@ -8,12 +8,11 @@ repositories {
 
 dependencies {
     compile "io.dropwizard.metrics:metrics-core:${metricsVersion}"
-    compile 'org.apache.httpcomponents:fluent-hc:4.4+'
-    compile 'com.fasterxml.jackson.core:jackson-databind:2.5.1+'
-    compile 'com.indeed:java-dogstatsd-client:2.0.10+'
+    compile 'io.dropwizard:dropwizard-metrics:0.7.0+'
+    compile project(':metrics-datadog')
 
     testCompile "junit:junit:${junitVersion}"
-    testCompile 'org.mockito:mockito-all:1.9.5+'
+    testCompile 'org.easytesting:fest-assert-core:2.0M10'
 }
 
 test {
