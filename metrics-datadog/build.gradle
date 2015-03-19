@@ -1,3 +1,5 @@
+description="A Metrics reporter for Datadog"
+
 dependencies {
     compile "io.dropwizard.metrics:metrics-core:${metricsVersion}"
     compile 'org.apache.httpcomponents:fluent-hc:4.4+'

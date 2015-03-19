@@ -1,3 +1,5 @@
+description="dropwizard-metrics integration to automatically report metrics to datadog"
+
 dependencies {
     compile "io.dropwizard.metrics:metrics-core:${metricsVersion}"
     compile 'io.dropwizard:dropwizard-metrics:0.7.0+'

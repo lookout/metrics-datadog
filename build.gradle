@@ -1,6 +1,12 @@
-
+buildscript {
+    repositories { jcenter() }
+    dependencies {
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.1+'
+    }
+}
 
 subprojects {
+    apply plugin: 'com.jfrog.bintray'
     apply plugin: 'java'
 
     repositories {
@@ -17,4 +23,28 @@ subprojects {
             events "passed", "skipped", "failed", "standardOut", "standardError"
         }
     }
+
+
+    bintray {
+        user = project.bintrayUser
+        key = project.bintrayKey
+        publish = true
+        dryRun = false
+        configurations = ['archives']
+
+        pkg {
+            userOrg = 'lookout'
+            repo = 'systems'
+            name = 'metrics-datadog'
+            labels = []
+
+            version {
+                name = project.version
+                vcsTag = "v${project.version}"
+                desc = project.description
+            }
+        }
+    }
+    bintrayUpload.dependsOn assemble
+
 }
