@@ -7,6 +7,7 @@ buildscript {
 
 subprojects {
     apply plugin: 'com.jfrog.bintray'
+    apply plugin: 'maven'
     apply plugin: 'java'
 
     repositories {
