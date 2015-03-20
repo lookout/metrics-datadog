@@ -638,6 +638,7 @@ public class DatadogReporterTest {
 
   private <T> Gauge gauge(T value, String... tags) {
     final TaggedGauge gauge = mock(TaggedGauge.class);
+    when(gauge.getName()).thenReturn("gauge");
     when(gauge.getValue()).thenReturn(value);
     when(gauge.getTags()).thenReturn(Arrays.asList(tags));
     return gauge;

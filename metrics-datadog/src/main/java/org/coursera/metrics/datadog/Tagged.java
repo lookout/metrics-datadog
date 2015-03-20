@@ -13,4 +13,10 @@ public interface Tagged {
      * with the metrics
      */
     public List<String> getTags();
+
+    /**
+     * Provide the name for the metric to be used instead of the uniquely
+     * identifiable metric registry name
+     */
+    public String getName();
 }

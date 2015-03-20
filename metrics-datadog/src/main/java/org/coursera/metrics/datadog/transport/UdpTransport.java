@@ -86,7 +86,7 @@ public class UdpTransport implements Transport {
             "will pick the first point only");
       }
       double value = gauge.getPoints().get(0).get(1).doubleValue();
-      String[] tags = gauge.getTags().toArray(new String[gauge.getTags().size()]);
+      String[] tags = gauge.getTags().toArray(new String[0]);
       statsdClient.gauge(gauge.getMetric(), value, tags);
     }
 
