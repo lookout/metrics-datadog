@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * Uses dogstatsd UDP protocol to push metrics to datadog. Note that datadog doesn't support
  * time in the UDP protocol. So all metrics are against current time.
- * <p/>
+ * <p>
  * Also dogstatsd UDP doesn't support batching of metrics, so it pushes metrics as it receives
  * rather than batching.
  *

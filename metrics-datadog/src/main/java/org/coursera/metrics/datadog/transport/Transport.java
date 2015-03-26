@@ -19,7 +19,7 @@ public interface Transport extends Closeable {
   /**
    * A request for batching of metrics to be pushed to datadog.
    * The call order is expected to be:
-   *    one or more of addGauge, addCounter -> send()
+   *    one or more of addGauge, addCounter -&lt; send()
    */
   public interface Request {
 
